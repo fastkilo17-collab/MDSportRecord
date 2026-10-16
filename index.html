@@ -1,0 +1,1034 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Badminton Live Score</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Kanit:wght@500;700&family=Sarabun:wght@400;600;700&display=swap">
+<style>
+/* Layout: canvas stage (camera + overlay) on top, control deck below; side by side in landscape. */
+:root{
+  --bg:#0d1511; --panel:#16211b; --panel2:#1d2b24; --line:#2a3b32;
+  --fg:#e9f1ec; --muted:#93a79b; --accent:#b9e53c; --accent-fg:#10200a;
+  --a:#1f7ae0; --b:#e8452c; --danger:#ff6b5a;
+  --f-display:"Kanit","Sarabun",system-ui,sans-serif; --f-body:"Sarabun","Noto Sans Thai",system-ui,sans-serif;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%}
+#cvSetup{width:100%;height:auto;display:block;border-radius:12px;cursor:pointer;touch-action:manipulation;background:#0b2519}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 var(--f-body);-webkit-tap-highlight-color:transparent}
+#app{min-height:100%;display:grid;gap:12px;padding:max(10px,env(safe-area-inset-top)) max(12px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(12px,env(safe-area-inset-left));grid-template-columns:minmax(0,1fr);align-content:start;background:var(--bg)}
+.stage{position:relative;background:#000;border-radius:12px;overflow:hidden;aspect-ratio:16/9;width:100%}
+#cv{width:100%;height:100%;display:block}
+#status{position:absolute;left:8px;bottom:8px;right:8px;font-size:13px;color:#fff;background:rgba(0,0,0,.55);padding:4px 8px;border-radius:8px;display:none}
+.deck{display:grid;gap:10px;min-width:0;align-content:start}
+.row{display:grid;gap:8px;grid-template-columns:repeat(2,minmax(0,1fr))}
+.row.r4{grid-template-columns:repeat(4,minmax(0,1fr))}
+button,select,input{font:inherit;color:inherit}
+button{border:1px solid var(--line);background:var(--panel2);border-radius:12px;padding:10px 6px;min-height:46px;cursor:pointer;font-weight:600;touch-action:manipulation}
+button:active{transform:scale(.97)}
+button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+button.big{min-height:96px;font-family:var(--f-display);font-size:22px;border:0;color:#fff;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px}
+button.big small{font:600 14px var(--f-body);opacity:.9;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 6px}
+button.big .plus{font-size:40px;line-height:1}
+#btnA{background:var(--a)} #btnB{background:var(--b)}
+button.primary{background:var(--accent);color:var(--accent-fg);border:0}
+button.danger{color:var(--danger)}
+button.rec{color:#fff;background:#8a1f14;border:0}
+button[disabled]{opacity:.4}
+#nextSet{min-height:56px;font-size:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px;display:grid;gap:10px;min-width:0}
+.panel h3{margin:0;font:700 15px var(--f-display);letter-spacing:.04em;text-transform:uppercase;color:var(--muted)}
+.grid2{display:grid;gap:10px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+label.f{display:grid;gap:4px;font-size:13px;color:var(--muted);min-width:0}
+input[type=text],input[type=number],select{width:100%;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:9px 10px;color:var(--fg)}
+input[type=color]{width:100%;height:42px;padding:2px;background:var(--bg);border:1px solid var(--line);border-radius:10px}
+.team{border-left:5px solid var(--a);padding-left:10px;display:grid;gap:8px}
+.team.b{border-left-color:var(--b)}
+.photo{display:flex;gap:8px;align-items:center;min-width:0}
+.photo img{width:42px;height:42px;border-radius:50%;object-fit:cover;background:var(--bg);border:1px solid var(--line);flex:none}
+.photo input[type=file]{min-width:0;flex:1;font-size:12px;color:var(--muted)}
+.photo button{min-height:36px;padding:4px 10px}
+.seg{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.seg label{display:block}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{display:block;text-align:center;padding:10px;border:1px solid var(--line);border-radius:10px;background:var(--bg)}
+.seg input:checked+span{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:700}
+.seg input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.chk{display:flex;gap:8px;align-items:center;font-size:14px}
+.chk input{width:20px;height:20px;accent-color:var(--accent)}
+#recs a{color:var(--accent);display:block;padding:6px 0}
+.hint{font-size:13px;color:var(--muted)}
+@media (min-width:760px) and (orientation:landscape){
+  #app{grid-template-columns:minmax(0,1.5fr) minmax(320px,1fr);align-items:start}
+  .stage{position:sticky;top:10px}
+}
+.seg.three{grid-template-columns:repeat(3,1fr)}
+.fsside,.fsbar{display:none}
+#mediaFile{font-size:13px;color:var(--muted);min-width:0;max-width:100%}
+.mlist{display:flex;flex-wrap:wrap;gap:8px}
+.mt{position:relative;width:64px;height:64px;border-radius:10px;border:2px solid var(--line);overflow:hidden;background:repeating-conic-gradient(#8884 0 25%,transparent 0 50%) 0 0/14px 14px,var(--bg)}
+.mt.sel{border-color:var(--accent)}
+.mt .pick{position:absolute;inset:0;width:100%;min-height:0;padding:0;border:0;border-radius:0;background:none}
+.mt img{width:100%;height:100%;object-fit:contain;display:block;pointer-events:none}
+.mt .del{position:absolute;top:0;right:0;width:24px;min-height:0;height:24px;padding:0;border:0;border-radius:0 0 0 8px;background:rgba(0,0,0,.72);color:#fff;line-height:1}
+#closeSettings{justify-self:end;min-height:40px;padding:4px 14px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+
+.imgmenu{position:fixed;z-index:65;left:50%;bottom:calc(var(--barH,56px) + max(6px,env(safe-area-inset-bottom)) + 12px);transform:translateX(-50%);display:flex;flex-wrap:wrap;justify-content:center;gap:8px;max-width:94vw;padding:8px;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 10px 34px rgba(0,0,0,.55)}
+.imgmenu button{min-width:150px;min-height:56px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 12px}
+.imgmenu button small{font-size:12px;color:var(--muted);font-weight:600}
+.imgmenu button.on{border-color:var(--accent);background:rgba(185,229,60,.16)}
+.imgmenu button.on small{color:var(--accent)}
+/* Full screen, landscape: [team A buttons] [16:9 stage] [team B buttons] on top, one bar of tools underneath. */
+#app.fs{--stageW:640px;position:fixed;inset:0;z-index:50;height:100%;overflow:hidden;align-items:stretch;align-content:stretch;gap:6px;
+  grid-template-columns:minmax(0,1fr) var(--stageW) minmax(0,1fr);grid-template-rows:minmax(0,1fr) auto;
+  padding:max(6px,env(safe-area-inset-top)) max(10px,env(safe-area-inset-right)) max(6px,env(safe-area-inset-bottom)) max(10px,env(safe-area-inset-left))}
+#app.fs .stage{position:relative;top:auto;grid-column:2;grid-row:1;align-self:center;width:var(--stageW);height:auto;border-radius:8px}
+#app.fs .fsside{display:grid;grid-row:1;align-self:center;grid-template-rows:minmax(0,1.7fr) minmax(0,1fr);gap:6px;min-width:0;width:100%;max-width:190px;height:calc(var(--stageW)*9/16)}
+#app.fs .fsA{grid-column:1;justify-self:end}
+#app.fs .fsB{grid-column:3;justify-self:start}
+#app.fs .fsside button{min-height:0;height:100%;width:100%;font-size:18px}
+#app.fs .fsside button.big{font-size:16px}
+#app.fs .fsside button.big .plus{font-size:38px}
+#app.fs .fsbar{display:flex;grid-column:1/-1;grid-row:2;gap:6px}
+#app.fs .fsbar button{flex:1 1 0;min-width:0;min-height:50px;padding:3px 2px;font-size:13px;line-height:1.15;display:flex;flex-direction:column;align-items:center;justify-content:center;overflow:hidden}
+#app.fs .fsbar button small{font-size:11px;font-weight:600;color:var(--muted)}
+#app.fs .fsbar button.on{border-color:var(--accent);background:rgba(185,229,60,.16)}
+#app.fs .fsbar button.on small{color:var(--accent)}
+#app.fs .fsbar button.primary small{color:inherit}
+#app.fs .fsbar button.rec{background:#8a1f14}
+#app.fs .deck{position:absolute;inset:0;display:block;pointer-events:none}
+#app.fs .deck>.row,#app.fs .deck>#nextSet,#app.fs .deck>#recs{display:none!important}
+#app.fs #setup,#app.fs #settings{position:fixed;inset:0;z-index:60;overflow:auto;border-radius:0;align-content:start;pointer-events:auto;padding:max(12px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(12px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+#app.fs #settings{z-index:70}
+#app.fs #cvSetup{width:auto;max-width:100%;max-height:52vh;margin:0 auto}
+@media (orientation:portrait){
+  #app.fs{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:auto auto auto;align-content:start;overflow:auto}
+  #app.fs .stage{grid-column:1/-1;width:100%}
+  #app.fs .fsside{grid-row:2;grid-template-rows:none;grid-template-columns:1.7fr 1fr;height:auto;max-width:none}
+  #app.fs .fsA{grid-column:1;justify-self:stretch}
+  #app.fs .fsB{grid-column:2;justify-self:stretch}
+  #app.fs .fsside button{min-height:76px}
+  #app.fs .fsbar{grid-row:3;flex-wrap:wrap}
+  #app.fs .fsbar button{flex:1 1 22%}
+}
+@media (prefers-reduced-motion:reduce){button:active{transform:none}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="stage">
+    <canvas id="cv" width="1280" height="720"></canvas>
+    <div id="status" role="status"></div>
+  </div>
+
+  <div class="fsside fsA">
+    <button class="big" data-act="plusA"><span class="plus">+1</span><small data-lbl="0">ทีม A</small></button>
+    <button data-act="minA">−1</button>
+  </div>
+  <div class="fsside fsB">
+    <button class="big" data-act="plusB"><span class="plus">+1</span><small data-lbl="1">ทีม B</small></button>
+    <button data-act="minB">−1</button>
+  </div>
+  <div class="fsbar">
+    <button data-act="undo">ย้อนกลับ</button>
+    <button data-act="swap">สลับเสิร์ฟ</button>
+    <button data-act="court"></button>
+    <button data-act="img"></button>
+    <button data-act="rec"></button>
+    <button data-act="next" class="primary" hidden>เซตถัดไป ▶</button>
+    <button data-act="settings">ตั้งค่า</button>
+    <button data-act="exit">✕ ออก</button>
+  </div>
+
+  <div class="imgmenu" id="imgMenu" role="menu" hidden>
+    <button type="button" data-mm="ads" role="menuitem"><span>รูปโฆษณา</span><small id="mmAdsInfo"></small></button>
+    <button type="button" data-mm="players" role="menuitem"><span>รูปผู้เล่นทั้งหมด</span><small id="mmPlInfo"></small></button>
+    <button type="button" data-mm="off" role="menuitem"><span>ปิดรูปกลางจอ</span></button>
+  </div>
+
+  <div class="deck">
+    <section class="panel" id="setup" hidden>
+      <h3 id="setupTitle">ตั้งตำแหน่งก่อนเริ่มเกม</h3>
+      <canvas id="cvSetup" width="720" height="380" aria-label="กราฟิกสนามแบดมินตัน"></canvas>
+      <p class="hint" id="setupHint"></p>
+      <p class="hint" style="margin:0">เลือกทีมที่เสิร์ฟก่อน</p>
+      <div class="seg" role="radiogroup" aria-label="ทีมที่เสิร์ฟก่อน">
+        <label><input type="radio" name="firstServe" value="0"><span id="fsA">ทีม A</span></label>
+        <label><input type="radio" name="firstServe" value="1"><span id="fsB">ทีม B</span></label>
+      </div>
+      <div class="row">
+        <button id="swapSides">สลับข้างสนาม</button>
+        <button id="startGame" class="primary">เริ่มเกม ▶</button>
+      </div>
+    </section>
+    <div class="row">
+      <button class="big" id="btnA"><span class="plus">+1</span><small id="lblA">ทีม A</small></button>
+      <button class="big" id="btnB"><span class="plus">+1</span><small id="lblB">ทีม B</small></button>
+    </div>
+    <button class="primary" id="nextSet" hidden>เริ่มเซตถัดไป ▶</button>
+    <div class="row r4">
+      <button id="minA">−1 A</button>
+      <button id="minB">−1 B</button>
+      <button id="undo">ย้อนกลับ</button>
+      <button id="swapServe">สลับเสิร์ฟ</button>
+    </div>
+    <div class="row r4">
+      <button id="camBtn" class="primary nofs">เปิดกล้อง</button>
+      <button id="flipCam" class="nofs">สลับกล้อง</button>
+      <button id="recBtn">● บันทึก</button>
+      <button id="fsBtn" class="nofs">เต็มจอ แนวนอน</button>
+    </div>
+    <div class="row r4">
+      <button id="settingsBtn" class="nofs">ตั้งค่า</button>
+      <button id="endSet" class="nofs">จบเซตเอง</button>
+      <button id="newSet" class="nofs">เซตใหม่</button>
+      <button id="resetBtn" class="danger nofs">รีเซ็ต</button>
+    </div>
+    <div id="recs"></div>
+
+    <section class="panel" id="settings" hidden>
+      <button id="closeSettings" type="button">✕ ปิดตั้งค่า</button>
+      <h3>กติกาและรูปแบบ</h3>
+      <label class="f">ชื่อรายการ
+        <input type="text" id="cTitle" maxlength="40" placeholder="เช่น ก๊วนวันศุกร์ / รอบชิงชนะเลิศ">
+      </label>
+      <div class="seg" role="radiogroup" aria-label="รูปแบบ">
+        <label><input type="radio" name="mode" value="singles"><span>เดี่ยว</span></label>
+        <label><input type="radio" name="mode" value="doubles"><span>คู่</span></label>
+      </div>
+      <div class="grid2">
+        <label class="f">แต้มต่อเซต (1–30)
+          <input type="number" id="cTarget" min="1" max="30" inputmode="numeric">
+        </label>
+        <label class="f">จำนวนเซต
+          <select id="cSets"><option value="1">1 เซต</option><option value="3">ชนะ 2 ใน 3 เซต</option><option value="5">ชนะ 3 ใน 5 เซต</option></select>
+        </label>
+      </div>
+      <p class="hint" style="margin:0">ขนาดโอเวอร์เลย์บนจอไลฟ์</p>
+      <div class="seg three" role="radiogroup" aria-label="ขนาดโอเวอร์เลย์">
+        <label><input type="radio" name="osize" value="L"><span>ใหญ่</span></label>
+        <label><input type="radio" name="osize" value="M"><span>กลาง</span></label>
+        <label><input type="radio" name="osize" value="S"><span>เล็ก</span></label>
+      </div>
+      <p class="hint" style="margin:0">ตำแหน่งโอเวอร์เลย์ (กลางบน/กลางล่าง จะจัดทีมซ้าย-ขวา คะแนนอยู่ตรงกลาง)</p>
+      <div class="seg three" role="radiogroup" aria-label="ตำแหน่งโอเวอร์เลย์">
+        <label><input type="radio" name="opos" value="TL"><span>ซ้ายบน</span></label>
+        <label><input type="radio" name="opos" value="TC"><span>กลางบน</span></label>
+        <label><input type="radio" name="opos" value="TR"><span>ขวาบน</span></label>
+        <label><input type="radio" name="opos" value="BL"><span>ซ้ายล่าง</span></label>
+        <label><input type="radio" name="opos" value="BC"><span>กลางล่าง</span></label>
+        <label><input type="radio" name="opos" value="BR"><span>ขวาล่าง</span></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="cShowCourt"> แสดงตำแหน่งผู้เล่น (กราฟิกสนาม) บนจอไลฟ์</label>
+      <label class="chk"><input type="checkbox" id="cCap"> ใช้กติกาแต้มเสมอ: ต้องนำ 2 แต้ม และชนะที่แต้มสูงสุด (เป้าหมาย + 9 เช่น 21 → 30)</label>
+
+      <div class="team" id="teamA"></div>
+      <div class="team b" id="teamB"></div>
+
+      <h3>รูปกลางจอ (โฆษณา / นักกีฬาไม่มีพื้นหลัง)</h3>
+      <input type="file" id="mediaFile" accept="image/*" multiple aria-label="เพิ่มรูปกลางจอ">
+      <div class="mlist" id="mediaList"></div>
+      <p class="hint" style="margin:0">แสดงที่กลางจอ</p>
+      <div class="seg three" role="radiogroup" aria-label="รูปกลางจอ">
+        <label><input type="radio" name="mmode" value="off"><span>ปิด</span></label>
+        <label><input type="radio" name="mmode" value="ads"><span>รูปโฆษณา</span></label>
+        <label><input type="radio" name="mmode" value="players"><span>รูปผู้เล่น</span></label>
+      </div>
+      <label class="chk"><input type="checkbox" id="mediaAuto"> สลับรูปโฆษณาอัตโนมัติ (เมื่อมีหลายรูป)</label>
+      <label class="f">เปลี่ยนรูปทุก <span id="mediaSecsVal">5</span> วินาที
+        <input type="range" id="mediaSecs" min="2" max="20" step="1">
+      </label>
+      <label class="f">ขนาดรูปโฆษณา <span id="adScaleVal">70%</span>
+        <input type="range" id="adScale" min="30" max="100" step="5">
+      </label>
+      <label class="f">ขนาดรูปผู้เล่น <span id="plScaleVal">70%</span>
+        <input type="range" id="plScale" min="30" max="100" step="5">
+      </label>
+      <p class="hint">รูปโฆษณา: แนะนำ PNG/WebP พื้นหลังโปร่งใส เก็บได้สูงสุด 10 รูป ถ้าปิดการสลับอัตโนมัติจะแสดงรูปที่แตะเลือก • รูปผู้เล่น: ใช้รูปและชื่อจากข้อมูลทีม/นักกีฬาด้านบน • ปุ่ม "รูปกลางจอ" ในโหมดเต็มจอจะให้เลือกโหมดเหล่านี้</p>
+
+      <h3>ตั้งแต้มเอง</h3>
+      <div class="grid2">
+        <label class="f">แต้ม A<input type="number" id="mA" min="0" max="30" inputmode="numeric"></label>
+        <label class="f">แต้ม B<input type="number" id="mB" min="0" max="30" inputmode="numeric"></label>
+        <label class="f">เซตที่ชนะ A<input type="number" id="mSA" min="0" max="3" inputmode="numeric"></label>
+        <label class="f">เซตที่ชนะ B<input type="number" id="mSB" min="0" max="3" inputmode="numeric"></label>
+      </div>
+      <button id="applyManual" class="primary">ใช้ค่าที่ตั้ง</button>
+      <p class="hint">กล้องต้องเปิดผ่านลิงก์ https (หรือ localhost) เท่านั้น ข้อมูลทีม รูป และสกอร์ถูกจำไว้ในเครื่องนี้</p>
+    </section>
+  </div>
+</div>
+
+<script>
+(function(){
+"use strict";
+
+/* ---------- state ---------- */
+var KEY="badminton-live-v1";
+function freshTeam(n,c){return {name:"",color:c,p:[{name:"",photo:""},{name:"",photo:""}]};}
+function freshGame(){return {score:[0,0],setsWon:[0,0],hist:[],server:0,setNo:1,pending:false,over:-1,lastWinner:0,right:[0,0],flip:false,started:false};}
+var S={cfg:{title:"",mode:"singles",target:21,sets:3,cap:true},t:[freshTeam(0,"#1f7ae0"),freshTeam(1,"#e8452c")],g:freshGame()};
+try{var raw=localStorage.getItem(KEY);if(raw){var o=JSON.parse(raw);if(o&&o.cfg&&o.t&&o.g)S=o;}}catch(e){}
+(function(){var g=S.g;
+  if(!g.right)g.right=[0,0];
+  if(g.flip===undefined)g.flip=false;
+  if(g.started===undefined)g.started=(g.score[0]+g.score[1]>0||g.hist.length>0||g.setNo>1);
+})();
+if(!S.media||!Array.isArray(S.media.imgs))S.media={imgs:[],active:0,mode:"off",adScale:70,plScale:70,auto:true,secs:5};
+(function(){var m=S.media;if(!m.mode)m.mode=m.show?"ads":"off";if(m.auto===undefined)m.auto=true;if(!m.secs)m.secs=5;if(!m.adScale)m.adScale=m.scale||70;if(!m.plScale)m.plScale=m.scale||70;delete m.scale;delete m.show;})();
+var undoStack=[];
+var banner={text:"",until:0};
+var OSIZE={S:0.75,M:1,L:1.3},OLABEL={S:"เล็ก",M:"กลาง",L:"ใหญ่"};
+
+var saveWarned=false,idbOK=!!window.indexedDB,dbP=null,MAXADS=10;
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(S,function(k,v){return(idbOK&&k==="imgs")?undefined:v;}));}
+  catch(e){if(!saveWarned){saveWarned=true;say("พื้นที่จัดเก็บเต็ม รูปอาจไม่ถูกจำไว้ ลองลบรูปบางรูป",6000);}}
+}
+function idbOpen(){
+  if(!dbP)dbP=new Promise(function(res,rej){
+    try{
+      var r=indexedDB.open("badminton-live-media",1);
+      r.onupgradeneeded=function(){r.result.createObjectStore("kv");};
+      r.onsuccess=function(){res(r.result);};
+      r.onerror=function(){rej(r.error);};
+    }catch(e){rej(e);}
+  });
+  return dbP;
+}
+function idbGet(key){return idbOpen().then(function(db){return new Promise(function(res,rej){var q=db.transaction("kv","readonly").objectStore("kv").get(key);q.onsuccess=function(){res(q.result);};q.onerror=function(){rej(q.error);};});});}
+function idbSet(key,val){return idbOpen().then(function(db){return new Promise(function(res,rej){var tx=db.transaction("kv","readwrite");tx.objectStore("kv").put(val,key);tx.oncomplete=function(){res();};tx.onerror=function(){rej(tx.error);};tx.onabort=function(){rej(tx.error);};});});}
+function saveAds(){
+  save();
+  if(!idbOK)return;
+  idbSet("ads",S.media.imgs.slice()).catch(function(){idbOK=false;save();say("เบราว์เซอร์นี้เก็บรูปโฆษณาถาวรไม่ได้ รูปอาจหายเมื่อรีเฟรช",6000);});
+}
+function $(id){return document.getElementById(id);}
+function tname(i){return S.t[i].name.trim()||("ทีม "+(i?"B":"A"));}
+function capScore(){return S.cfg.cap?S.cfg.target+9:99;}
+function need(){return Math.ceil(S.cfg.sets/2);}
+function say(text,ms){banner={text:text,until:performance.now()+(ms||6000)};}
+
+/* ---------- scoring ---------- */
+function pushUndo(){undoStack.push(JSON.stringify(S.g));if(undoStack.length>200)undoStack.shift();}
+function setWinner(){
+  var s=S.g.score,T=S.cfg.target,i;
+  for(i=0;i<2;i++){
+    if(s[i]>=T&&s[i]-s[1-i]>=2)return i;
+    if(S.cfg.cap&&s[i]>=capScore())return i;
+  }
+  return -1;
+}
+function finishSet(w){
+  var g=S.g;
+  g.hist.push([g.score[0],g.score[1]]);
+  g.setsWon[w]++;g.lastWinner=w;
+  if(g.setsWon[w]>=need()){g.over=w;say("ผู้ชนะ: "+tname(w)+"  "+g.setsWon[0]+"-"+g.setsWon[1],60000);}
+  else{g.pending=true;say("จบเซต "+g.setNo+" • "+tname(w)+" ชนะ  เปลี่ยนข้าง",60000);}
+}
+function point(t,d){
+  var g=S.g;
+  if(g.pending||g.over>=0||!g.started)return;
+  var prev=g.score[t];
+  var nv=Math.max(0,Math.min(capScore(),prev+d));
+  if(nv===prev)return;
+  pushUndo();
+  var prevMax=Math.max(g.score[0],g.score[1]);
+  g.score[t]=nv;
+  if(d>0){
+    /* doubles: the serving side swaps its two players' courts each time it wins the rally */
+    if(g.server===t&&S.cfg.mode==="doubles")g.right[t]=1-g.right[t];
+    g.server=t;
+    var w=setWinner();
+    if(w>=0){finishSet(w);}
+    else if(S.cfg.target===21&&nv===11&&prevMax<11){
+      var decider=(S.cfg.sets>1&&g.setNo===S.cfg.sets);
+      if(decider)g.flip=!g.flip;
+      say(decider?"พัก 60 วินาที • เปลี่ยนข้าง (11 แต้ม)":"พัก 60 วินาที (11 แต้ม)",8000);
+    }
+  }
+  save();ui();
+}
+function undo(){
+  if(!undoStack.length)return;
+  S.g=JSON.parse(undoStack.pop());banner.until=0;save();ui();
+}
+function nextSet(){
+  var g=S.g;if(!g.pending)return;
+  pushUndo();
+  g.score=[0,0];g.pending=false;g.setNo++;g.server=g.lastWinner;g.flip=!g.flip;g.started=false;banner.until=0;
+  save();ui();
+}
+function endSetManual(){
+  var g=S.g;if(g.pending||g.over>=0)return;
+  if(g.score[0]===g.score[1]){say("แต้มเท่ากัน จบเซตไม่ได้",3000);return;}
+  pushUndo();finishSet(g.score[0]>g.score[1]?0:1);save();ui();
+}
+var armed=0;
+function resetAll(){
+  if(!armed||performance.now()>armed){armed=performance.now()+3000;$("resetBtn").textContent="แตะอีกครั้ง";setTimeout(function(){$("resetBtn").textContent="รีเซ็ต";},3000);return;}
+  armed=0;pushUndo();S.g=freshGame();banner.until=0;$("resetBtn").textContent="รีเซ็ต";save();ui();
+}
+function newSetOnly(){ /* restart current set from 0-0 */
+  var g=S.g;if(g.over>=0||g.pending)return;
+  pushUndo();g.score=[0,0];g.started=false;save();ui();
+}
+
+/* ---------- images ---------- */
+var imgCache={};
+function getImg(src){
+  if(!src)return null;
+  var e=imgCache[src];
+  if(!e){e={img:new Image(),ok:false};e.img.onload=function(){e.ok=true;};e.img.src=src;imgCache[src]=e;}
+  return e.ok?e.img:null;
+}
+function shrink(file,cb){
+  var r=new FileReader();
+  r.onload=function(){
+    var im=new Image();
+    im.onload=function(){
+      var c=document.createElement("canvas"),sz=360;c.width=c.height=sz;
+      var x=c.getContext("2d"),m=Math.min(im.width,im.height);
+      x.drawImage(im,(im.width-m)/2,(im.height-m)/2,m,m,0,0,sz,sz);
+      cb(c.toDataURL("image/jpeg",0.82));
+    };
+    im.src=r.result;
+  };
+  r.readAsDataURL(file);
+}
+
+/* ---------- canvas overlay ---------- */
+var cv=$("cv"),ctx=cv.getContext("2d"),W=cv.width,H=cv.height;
+var video=document.createElement("video");video.muted=true;video.playsInline=true;
+var stream=null,facing="environment";
+
+function rr(x,y,w,h,r,c){c=c||ctx;c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();}
+function fit(txt,maxW,c){
+  c=c||ctx;
+  if(c.measureText(txt).width<=maxW)return txt;
+  while(txt.length>1&&c.measureText(txt+"…").width>maxW)txt=txt.slice(0,-1);
+  return txt+"…";
+}
+function drawBg(){
+  if(stream&&video.videoWidth){
+    var vw=video.videoWidth,vh=video.videoHeight,s=Math.max(W/vw,H/vh),dw=vw*s,dh=vh*s;
+    ctx.drawImage(video,(W-dw)/2,(H-dh)/2,dw,dh);
+  }else{
+    var gr=ctx.createLinearGradient(0,0,W,H);gr.addColorStop(0,"#0f2a1f");gr.addColorStop(1,"#0a1612");
+    ctx.fillStyle=gr;ctx.fillRect(0,0,W,H);
+    ctx.strokeStyle="rgba(185,229,60,.18)";ctx.lineWidth=4;
+    ctx.strokeRect(160,110,960,500);ctx.beginPath();ctx.moveTo(640,110);ctx.lineTo(640,610);ctx.moveTo(160,360);ctx.lineTo(1120,360);ctx.stroke();
+    ctx.fillStyle="rgba(255,255,255,.7)";ctx.font="600 30px Sarabun,sans-serif";ctx.textAlign="center";
+    ctx.fillText("ยังไม่ได้เปิดกล้อง • กด “เปิดกล้อง”",W/2,H-60);ctx.textAlign="left";
+  }
+}
+function drawAvatar(cx,cy,r,p,color,fallback){
+  ctx.save();ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.closePath();ctx.clip();
+  var im=getImg(p.photo);
+  if(im){ctx.drawImage(im,cx-r,cy-r,r*2,r*2);}
+  else{ctx.fillStyle=color;ctx.fillRect(cx-r,cy-r,r*2,r*2);ctx.fillStyle="#fff";ctx.font="700 "+Math.round(r)+"px Kanit,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText((p.name||fallback).trim().charAt(0).toUpperCase(),cx,cy+2);ctx.textAlign="left";ctx.textBaseline="alphabetic";}
+  ctx.restore();
+  ctx.beginPath();ctx.arc(cx,cy,r,0,7);ctx.lineWidth=3;ctx.strokeStyle="#fff";ctx.stroke();
+}
+/* overlay position: "TL","TC","TR","BL","BC","BR" = vertical (T/B) + horizontal (L/C/R) */
+var POSLBL={TL:"ซ้ายบน",TC:"กลางบน",TR:"ขวาบน",BL:"ซ้ายล่าง",BC:"กลางล่าง",BR:"ขวาล่าง"};
+function posOf(){var p=S.cfg.pos;return POSLBL[p]?p:"TL";}
+function boardDims(){
+  var ctr=posOf().charAt(1)==="C",chip=S.g.hist.length>0;
+  return {center:ctr,chip:chip,w:ctr?940:560,rows:ctr?92:156,h:34+(ctr?92:156)+(chip?40:0)};
+}
+function boardScale(d){return Math.min(OSIZE[S.cfg.osize]||1,(W-56)/d.w);}
+function drawGroup(gx,i,dbl,cy){
+  var t=S.t[i];
+  if(dbl){drawAvatar(gx+26,cy,26,t.p[0],t.color,"A");drawAvatar(gx+60,cy,26,t.p[1],t.color,"B");}
+  else drawAvatar(gx+28,cy,28,t.p[0],t.color,i?"B":"A");
+}
+function teamText(i,dbl){
+  var t=S.t[i],nm=t.name.trim(),pl=dbl?[t.p[0].name.trim(),t.p[1].name.trim()].filter(Boolean).join(" / "):t.p[0].name.trim();
+  if(!nm&&!pl)nm="ทีม "+(i?"B":"A");
+  return {nm:nm,pl:pl};
+}
+function drawBoard(above){
+  var g=S.g,d=boardDims(),dbl=S.cfg.mode==="doubles",w=d.w,hh=34,x=0,y=(above&&d.chip)?40:0,total=hh+d.rows,i;
+  ctx.save();
+  ctx.shadowColor="rgba(0,0,0,.45)";ctx.shadowBlur=18;
+  ctx.fillStyle="rgba(8,14,12,.86)";rr(x,y,w,total,14);ctx.fill();
+  ctx.restore();
+  /* header */
+  ctx.font="600 17px Sarabun,sans-serif";ctx.fillStyle="#b9e53c";ctx.textBaseline="middle";ctx.textAlign="left";
+  var head=(S.cfg.title.trim()||"แบดมินตัน")+" • "+(dbl?"คู่":"เดี่ยว");
+  ctx.fillText(fit(head,w-150),x+16,y+hh/2+1);
+  ctx.textAlign="right";ctx.fillStyle="#fff";
+  ctx.fillText("เซต "+g.setNo+" • ถึง "+S.cfg.target,x+w-14,y+hh/2+1);ctx.textAlign="left";
+  if(!d.center){
+    var rh=78;
+    for(i=0;i<2;i++){
+      var t=S.t[i],ry=y+hh+i*rh,cy=ry+rh/2;
+      ctx.fillStyle="rgba(255,255,255,.06)";if(i)ctx.fillRect(x+10,ry,w-20,1);
+      ctx.fillStyle=t.color;rr(x+10,ry+8,8,rh-16,4);ctx.fill();
+      var ax=x+56,pw=70;
+      if(dbl){drawAvatar(ax,cy,26,t.p[0],t.color,"A");drawAvatar(ax+34,cy,26,t.p[1],t.color,"B");pw=106;}
+      else drawAvatar(ax,cy,28,t.p[0],t.color,i?"B":"A");
+      var tx=x+34+pw+8,maxW=x+w-190-tx,tt=teamText(i,dbl);
+      ctx.fillStyle="#fff";ctx.font="700 26px Kanit,Sarabun,sans-serif";
+      if(tt.nm&&tt.pl){ctx.fillText(fit(tt.nm,maxW),tx,cy-10);ctx.font="400 18px Sarabun,sans-serif";ctx.fillStyle="#cfe0d6";ctx.fillText(fit(tt.pl,maxW),tx,cy+17);}
+      else{ctx.fillText(fit(tt.nm||tt.pl,maxW),tx,cy+2);}
+      if(g.server===i&&g.over<0){
+        var sx=x+w-176,sc=g.score[i]%2===0?"ขวา":"ซ้าย";
+        ctx.fillStyle="#b9e53c";ctx.beginPath();ctx.arc(sx,cy-8,9,0,7);ctx.fill();
+        ctx.font="600 14px Sarabun,sans-serif";ctx.textAlign="center";ctx.fillStyle="#b9e53c";ctx.fillText(sc,sx,cy+20);ctx.textAlign="left";
+      }
+      ctx.fillStyle="rgba(255,255,255,.12)";rr(x+w-150,cy-26,46,52,8);ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="700 30px Kanit,sans-serif";ctx.textAlign="center";ctx.fillText(String(g.setsWon[i]),x+w-127,cy+2);
+      ctx.fillStyle=t.color;rr(x+w-96,cy-32,84,64,10);ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="700 46px Kanit,sans-serif";ctx.fillText(String(g.score[i]),x+w-54,cy+3);
+      ctx.textAlign="left";
+    }
+  }else{
+    /* centred layout: team A on the left, team B on the right, scores in the middle */
+    var sideW=325,cw=290,cx0=x+sideW,cy2=y+hh+d.rows/2,gw=dbl?86:56;
+    ctx.fillStyle="rgba(255,255,255,.07)";rr(cx0,y+hh+6,cw,d.rows-12,12,ctx);ctx.fill();
+    for(i=0;i<2;i++){
+      var tm=S.t[i],gx=i?x+w-16-gw:x+16,tt2=teamText(i,dbl);
+      ctx.fillStyle=tm.color;rr(i?x+w-10:x+2,y+hh+14,8,d.rows-28,4);ctx.fill();
+      drawGroup(gx,i,dbl,cy2);
+      var sdx=i?cx0+cw+26:cx0-26;
+      var tx2=i?gx-12:gx+gw+12,mW=(i?tx2-(sdx+22):(sdx-22)-tx2);
+      ctx.textAlign=i?"right":"left";
+      ctx.fillStyle="#fff";ctx.font="700 26px Kanit,Sarabun,sans-serif";
+      if(tt2.nm&&tt2.pl){ctx.fillText(fit(tt2.nm,mW),tx2,cy2-10);ctx.font="400 18px Sarabun,sans-serif";ctx.fillStyle="#cfe0d6";ctx.fillText(fit(tt2.pl,mW),tx2,cy2+17);}
+      else{ctx.fillText(fit(tt2.nm||tt2.pl,mW),tx2,cy2+2);}
+      if(g.server===i&&g.over<0){
+        var lab=g.score[i]%2===0?"ขวา":"ซ้าย";
+        ctx.fillStyle="#b9e53c";ctx.beginPath();ctx.arc(sdx,cy2-8,9,0,7);ctx.fill();
+        ctx.font="600 14px Sarabun,sans-serif";ctx.textAlign="center";ctx.fillText(lab,sdx,cy2+20);
+      }
+      var bxx=i?cx0+cw-8-90:cx0+8;
+      ctx.fillStyle=tm.color;rr(bxx,cy2-36,90,72,12);ctx.fill();
+      ctx.fillStyle="#fff";ctx.font="700 52px Kanit,sans-serif";ctx.textAlign="center";ctx.fillText(String(g.score[i]),bxx+45,cy2+3);
+    }
+    ctx.textAlign="center";ctx.fillStyle="#93a79b";ctx.font="600 13px Sarabun,sans-serif";ctx.fillText("เซตที่ชนะ",cx0+cw/2,cy2-18);
+    ctx.fillStyle="#fff";ctx.font="700 26px Kanit,sans-serif";ctx.fillText(g.setsWon[0]+" - "+g.setsWon[1],cx0+cw/2,cy2+8);
+    ctx.textAlign="left";
+  }
+  /* set history */
+  if(g.hist.length){
+    ctx.font="600 18px Sarabun,sans-serif";
+    var txt=g.hist.map(function(h,k){return "เซต"+(k+1)+" "+h[0]+"-"+h[1];}).join("   ");
+    var tw=ctx.measureText(txt).width+24,cyy=above?y-40+8:y+total+8;
+    ctx.fillStyle="rgba(8,14,12,.78)";rr(x,cyy,Math.min(tw,w),32,10);ctx.fill();
+    ctx.fillStyle="#fff";ctx.textBaseline="middle";ctx.fillText(fit(txt,Math.min(tw,w)-24),x+12,cyy+17);
+  }
+  ctx.textBaseline="alphabetic";
+}
+
+/* ---------- court graphic (top view, net in the middle, metres as in BWF laws) ---------- */
+function teamLeft(i){return (i===0)!==!!S.g.flip;}
+function tokensFor(i){
+  var g=S.g,dbl=S.cfg.mode==="doubles",act=(g.score[g.server]%2)?"L":"R",res=[];
+  if(dbl){var r=g.right[i];res.push({team:i,p:r,side:"R"});res.push({team:i,p:1-r,side:"L"});}
+  else res.push({team:i,p:0,side:act});
+  res.forEach(function(t){t.active=(t.side===act);t.serving=(t.active&&i===g.server);});
+  return res;
+}
+function courtMeters(i,side,dist,dbl){
+  var left=teamLeft(i),south=left?(side==="R"):(side==="L");
+  return {x:left?6.7-dist:6.7+dist,y:dbl?(south?4.575:1.525):(south?4.345:1.755)};
+}
+function drawToken(c,cx,cy,r,p,color,fb,serving){
+  c.save();c.beginPath();c.arc(cx,cy,r,0,7);c.closePath();c.clip();
+  var im=getImg(p.photo);
+  if(im){c.drawImage(im,cx-r,cy-r,r*2,r*2);}
+  else{c.fillStyle=color;c.fillRect(cx-r,cy-r,r*2,r*2);c.fillStyle="#fff";c.font="700 "+Math.round(r*1.1)+"px Kanit,sans-serif";c.textAlign="center";c.textBaseline="middle";
+    c.fillText(((p.name||"").trim().charAt(0)||fb).toUpperCase(),cx,cy+1);}
+  c.restore();
+  c.beginPath();c.arc(cx,cy,r,0,7);c.lineWidth=3;c.strokeStyle=color;c.stroke();
+  c.lineWidth=1;c.strokeStyle="#fff";c.beginPath();c.arc(cx,cy,r+1.5,0,7);c.stroke();
+  if(serving){c.fillStyle="#b9e53c";c.beginPath();c.arc(cx+r*0.8,cy-r*0.8,r*0.4,0,7);c.fill();c.lineWidth=1.5;c.strokeStyle="#10200a";c.stroke();}
+}
+function drawCourt(c,x,y,w,big){
+  var g=S.g,dbl=S.cfg.mode==="doubles",pad=big?12:8,head=big?32:24,sc=(w-pad*2)/13.4,ch=6.1*sc,tot=pad+head+ch+pad;
+  var ox=x+pad,oy=y+pad+head,hits=[],i;
+  function X(m){return ox+m*sc;}
+  function Y(m){return oy+m*sc;}
+  function Ln(a,b,d,e){c.beginPath();c.moveTo(X(a),Y(b));c.lineTo(X(d),Y(e));c.stroke();}
+  c.save();
+  c.fillStyle=big?"#0f3626":"rgba(8,30,22,.9)";rr(x,y,w,tot,12,c);c.fill();
+  c.font="700 "+(big?16:13)+"px Kanit,Sarabun,sans-serif";c.textAlign="center";c.textBaseline="middle";
+  for(i=0;i<2;i++){
+    var hx=X(teamLeft(i)?0:6.7);
+    c.fillStyle=S.t[i].color;rr(hx+2,y+pad,6.7*sc-4,head-6,6,c);c.fill();
+    c.fillStyle="#fff";c.fillText(fit(tname(i),6.7*sc-16,c),hx+3.35*sc,y+pad+(head-6)/2+1);
+  }
+  c.fillStyle="#1c6a49";c.fillRect(X(0),Y(0),13.4*sc,ch);
+  var act=(g.score[g.server]%2)?"L":"R";
+  for(i=0;i<2;i++){
+    var left=teamLeft(i),south=left?(act==="R"):(act==="L");
+    var far=dbl?5.94:6.7,y0=south?3.05:(dbl?0:0.46),y1=south?(dbl?6.1:5.64):3.05;
+    var x0=left?6.7-far:6.7+1.98,x1=left?6.7-1.98:6.7+far;
+    c.fillStyle=(i===g.server)?"rgba(185,229,60,.30)":"rgba(255,255,255,.14)";
+    c.fillRect(X(x0),Y(y0),(x1-x0)*sc,(y1-y0)*sc);
+  }
+  c.strokeStyle="rgba(255,255,255,.92)";c.lineWidth=big?2:1.4;
+  c.strokeRect(X(0),Y(0),13.4*sc,ch);
+  Ln(0,0.46,13.4,0.46);Ln(0,5.64,13.4,5.64);
+  Ln(4.72,0,4.72,6.1);Ln(8.68,0,8.68,6.1);
+  Ln(0.76,0,0.76,6.1);Ln(12.64,0,12.64,6.1);
+  Ln(0,3.05,4.72,3.05);Ln(8.68,3.05,13.4,3.05);
+  c.strokeStyle="#fff";c.lineWidth=big?5:3;Ln(6.7,-0.15,6.7,6.25);
+  var r=big?40:24;
+  for(i=0;i<2;i++){
+    tokensFor(i).forEach(function(t){
+      var dist=t.serving?2.6:(t.active?3.2:4.6),m=courtMeters(t.team,t.side,dist,dbl),cx=X(m.x),cy=Y(m.y),pl=S.t[t.team].p[t.p];
+      drawToken(c,cx,cy,r,pl,S.t[t.team].color,dbl?String(t.p+1):(t.team?"B":"A"),t.serving);
+      if(big){
+        var nm=(pl.name||"").trim();
+        if(nm){c.font="600 15px Sarabun,sans-serif";c.textAlign="center";c.textBaseline="alphabetic";c.fillStyle="#fff";c.fillText(fit(nm,130,c),cx,cy+r+18);}
+        hits.push({team:t.team,p:t.p,cx:cx,cy:cy,r:r});
+      }
+    });
+  }
+  c.restore();
+  return {h:tot,hits:hits};
+}
+var scv=$("cvSetup"),sctx=scv.getContext("2d"),setupHits=[];
+function drawSetup(){
+  if($("setup").hidden)return;
+  sctx.clearRect(0,0,scv.width,scv.height);
+  setupHits=drawCourt(sctx,0,0,scv.width,true).hits;
+}
+
+function bannerY(){
+  var P=posOf(),bv=P.charAt(0),bh=P.charAt(1);
+  if(bh==="C"){var d=boardDims(),kk=boardScale(d);return bv==="T"?28+d.h*kk+14:H-28-d.h*kk-14-68;}
+  return bv==="T"?H-110:28;
+}
+function drawBanner(){
+  var now=performance.now();
+  var txt=banner.text,show=txt&&now<banner.until;
+  if(S.g.over>=0){txt="🏆 ผู้ชนะ: "+tname(S.g.over)+"   "+S.g.setsWon[0]+" - "+S.g.setsWon[1];show=true;}
+  if(!show)return;
+  ctx.font="700 34px Kanit,Sarabun,sans-serif";
+  var tw=Math.min(ctx.measureText(txt).width+64,W-60),bx=(W-tw)/2,by=bannerY();
+  ctx.fillStyle="rgba(8,14,12,.9)";rr(bx,by,tw,68,34);ctx.fill();
+  ctx.lineWidth=3;ctx.strokeStyle="#b9e53c";ctx.stroke();
+  ctx.fillStyle="#fff";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(fit(txt,tw-40),W/2,by+36);
+  ctx.textAlign="left";ctx.textBaseline="alphabetic";
+}
+var imgAlpha=0,lastMM="off",shownMM="ads",adT0=0;
+function drawAd(i,al,cy,bandH){
+  var m=S.media,im=getImg(m.imgs[i]);if(!im||al<=0)return;
+  var sc=(m.adScale||70)/100,r=Math.min(W*0.9*sc/im.width,Math.min(H*0.9*sc,bandH)/im.height)*(0.94+0.06*imgAlpha),w=im.width*r,h=im.height*r;
+  ctx.save();ctx.globalAlpha=al;ctx.shadowColor="rgba(0,0,0,.55)";ctx.shadowBlur=28;ctx.shadowOffsetY=6;
+  ctx.drawImage(im,(W-w)/2,cy-h/2,w,h);ctx.restore();
+}
+function drawPlayerShow(a,cy,bandH){
+  var m=S.media,f=(m.plScale||70)/70,dbl=S.cfg.mode==="doubles";
+  var pw=Math.min(W-56,1100*f),ph=Math.min(bandH,430*f),x=(W-pw)/2,y=cy-ph/2,ps=Math.max(0.45,Math.min(1.25,ph/430)),z=0.96+0.04*a,i,k;
+  ctx.save();ctx.globalAlpha=a;ctx.translate(W/2,cy);ctx.scale(z,z);ctx.translate(-W/2,-cy);
+  ctx.save();ctx.shadowColor="rgba(0,0,0,.55)";ctx.shadowBlur=30;ctx.fillStyle="rgba(8,14,12,.9)";rr(x,y,pw,ph,24);ctx.fill();ctx.restore();
+  for(i=0;i<2;i++){
+    var t=S.t[i],cx=x+pw*(i?0.76:0.24),colW=pw*0.44,hb=46*ps;
+    ctx.fillStyle=t.color;rr(cx-colW/2,y+16,colW,hb,12);ctx.fill();
+    ctx.fillStyle="#fff";ctx.font="700 "+Math.round(28*ps)+"px Kanit,Sarabun,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText(fit(tname(i),colW-24),cx,y+16+hb/2+1);
+    var n=dbl?2:1,gap=22*ps,nameH=36*ps,top0=y+16+hb+14,availH=Math.max(24,y+ph-16-nameH-top0);
+    var size=Math.max(24,Math.min(availH,(colW-(n-1)*gap)/n,n===1?360:260)),total=n*size+(n-1)*gap,sx=cx-total/2,py=top0+(availH-size)/2;
+    for(k=0;k<n;k++){
+      var pl=t.p[k],px=sx+k*(size+gap),nm=(pl.name||"").trim(),im=getImg(pl.photo);
+      ctx.save();rr(px,py,size,size,size*0.14);ctx.clip();
+      if(im)ctx.drawImage(im,px,py,size,size);
+      else{ctx.fillStyle=t.color;ctx.fillRect(px,py,size,size);ctx.fillStyle="#fff";ctx.font="700 "+Math.round(size*0.5)+"px Kanit,sans-serif";ctx.fillText((nm.charAt(0)||(i?"B":"A")).toUpperCase(),px+size/2,py+size/2+2);}
+      ctx.restore();
+      ctx.lineWidth=4;ctx.strokeStyle=t.color;rr(px,py,size,size,size*0.14);ctx.stroke();
+      ctx.fillStyle="#fff";ctx.font="600 "+Math.round(22*ps)+"px Sarabun,sans-serif";
+      ctx.fillText(fit(nm||(dbl?"ผู้เล่น "+(k+1):"ผู้เล่น"),size+gap-6),px+size/2,py+size+nameH*0.55);
+    }
+  }
+  ctx.fillStyle="#b9e53c";ctx.font="700 "+Math.round(56*ps)+"px Kanit,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText("VS",W/2,cy);
+  ctx.restore();ctx.textAlign="left";ctx.textBaseline="alphabetic";
+}
+function drawCenterImage(top,bot){
+  var m=S.media,mm=m.mode,n=m.imgs.length;
+  if(mm!==lastMM){lastMM=mm;adT0=performance.now();}
+  if(mm!=="off")shownMM=mm;
+  var ok=(mm==="ads"&&n>0)||mm==="players",target=ok?1:0;
+  imgAlpha+=(target-imgAlpha)*0.2;
+  if(Math.abs(target-imgAlpha)<0.01)imgAlpha=target;
+  if(imgAlpha<=0)return;
+  var cy=(top+bot)/2,bandH=bot-top;
+  if(shownMM==="players"){drawPlayerShow(imgAlpha,cy,bandH);return;}
+  if(n<1)return;
+  if(m.auto!==false&&n>1){
+    var per=Math.max(2,m.secs||5)*1000,t=performance.now()-adT0,cyc=Math.floor(t/per),idx=cyc%n,a=cyc===0?1:Math.min(1,(t%per)/600);
+    drawAd(idx,imgAlpha*a,cy,bandH);
+    if(a<1)drawAd((idx-1+n)%n,imgAlpha*(1-a),cy,bandH);
+  }else drawAd(Math.min(m.active,n-1),imgAlpha,cy,bandH);
+}
+function frame(){
+  ctx.clearRect(0,0,W,H);
+  var P=posOf(),bv=P.charAt(0),bh=P.charAt(1),d=boardDims(),kk=boardScale(d);
+  var bx0=bh==="L"?28:(bh==="R"?W-28-d.w*kk:(W-d.w*kk)/2),by0=bv==="T"?28:H-28-d.h*kk;
+  var k=OSIZE[S.cfg.osize]||1,cwid=340*k,chgt=(16+24+6.1*(340-16)/13.4)*k,courtOn=S.cfg.showCourt!==false;
+  var cvv=(bh==="C")?(bv==="T"?"B":"T"):bv,top=28,bot=H-28;
+  if(bv==="T")top=Math.max(top,28+d.h*kk+12);else bot=Math.min(bot,H-28-d.h*kk-12);
+  if(courtOn){if(cvv==="T")top=Math.max(top,28+chgt+12);else bot=Math.min(bot,H-28-chgt-12);}
+  if(bot-top<160){top=28;bot=H-28;}
+  drawBg();drawCenterImage(top,bot);
+  ctx.save();ctx.translate(bx0,by0);ctx.scale(kk,kk);drawBoard(bv==="B");ctx.restore();
+  if(courtOn){
+    var chh=(bh==="L")?"R":(bh==="R"?"L":"R");
+    var cx0=chh==="R"?W-28-cwid:28,cy0=cvv==="T"?28:H-28-chgt;
+    ctx.save();ctx.translate(cx0,cy0);ctx.scale(k,k);drawCourt(ctx,0,0,340,false);ctx.restore();
+  }
+  drawBanner();drawSetup();
+  requestAnimationFrame(frame);
+}
+
+/* ---------- camera / record ---------- */
+function status(t){var s=$("status");if(!t){s.style.display="none";return;}s.textContent=t;s.style.display="block";}
+async function startCam(){
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){status("เบราว์เซอร์นี้เปิดกล้องไม่ได้ หรือหน้าเว็บไม่ได้เปิดผ่าน https");return;}
+  try{
+    if(stream){stream.getTracks().forEach(function(t){t.stop();});}
+    stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:facing},width:{ideal:1280},height:{ideal:720}},audio:true});
+    video.srcObject=stream;await video.play();status("");
+    try{if(navigator.wakeLock)await navigator.wakeLock.request("screen");}catch(e){}
+    $("camBtn").textContent="ปิดกล้อง";
+  }catch(e){
+    stream=null;
+    status("เปิดกล้องไม่สำเร็จ: "+(e&&e.name==="NotAllowedError"?"ยังไม่ได้อนุญาตกล้อง/ไมค์ในเบราว์เซอร์":(e&&e.message)||e));
+  }
+}
+function stopCam(){if(stream){stream.getTracks().forEach(function(t){t.stop();});}stream=null;video.srcObject=null;$("camBtn").textContent="เปิดกล้อง";}
+var rec=null,chunks=[];
+function startRec(){
+  var cs=cv.captureStream(30);
+  if(stream)stream.getAudioTracks().forEach(function(t){cs.addTrack(t);});
+  var types=["video/mp4;codecs=avc1","video/webm;codecs=vp9,opus","video/webm;codecs=vp8,opus","video/webm"],mt="";
+  for(var i=0;i<types.length;i++){if(window.MediaRecorder&&MediaRecorder.isTypeSupported(types[i])){mt=types[i];break;}}
+  if(!window.MediaRecorder){status("เบราว์เซอร์นี้ไม่รองรับการบันทึก");return;}
+  chunks=[];
+  rec=new MediaRecorder(cs,mt?{mimeType:mt,videoBitsPerSecond:4000000}:{});
+  rec.ondataavailable=function(e){if(e.data&&e.data.size)chunks.push(e.data);};
+  rec.onstop=function(){
+    var type=rec.mimeType||"video/webm",ext=type.indexOf("mp4")>-1?"mp4":"webm";
+    var url=URL.createObjectURL(new Blob(chunks,{type:type}));
+    var a=document.createElement("a");a.href=url;a.download="badminton-"+Date.now()+"."+ext;a.textContent="⬇ ดาวน์โหลดวิดีโอที่บันทึก ("+ext+")";
+    $("recs").appendChild(a);rec=null;$("recBtn").textContent="● บันทึก";$("recBtn").classList.remove("rec");ui();
+  };
+  rec.start(1000);$("recBtn").textContent="■ หยุดบันทึก";$("recBtn").classList.add("rec");ui();
+}
+
+/* ---------- settings UI ---------- */
+function teamForm(i){
+  var t=S.t[i],el=$(i?"teamB":"teamA"),nm=i?"B":"A";
+  var dbl=S.cfg.mode==="doubles";
+  function pblock(k){
+    var p=t.p[k];
+    return '<div class="photo"><img alt="" src="'+(p.photo||"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7")+'">'+
+      '<label class="f" style="flex:1">ชื่อนักกีฬา '+(dbl?(k+1):"")+'<input type="text" data-t="'+i+'" data-p="'+k+'" data-f="pname" maxlength="24" value="'+esc(p.name)+'"></label></div>'+
+      '<div class="photo"><input type="file" accept="image/*" data-t="'+i+'" data-p="'+k+'" data-f="photo" aria-label="รูปนักกีฬา"><button type="button" data-t="'+i+'" data-p="'+k+'" data-f="clear">ลบรูป</button></div>';
+  }
+  el.innerHTML='<div class="grid2"><label class="f">ชื่อทีม '+nm+'<input type="text" data-t="'+i+'" data-f="name" maxlength="24" value="'+esc(t.name)+'"></label>'+
+    '<label class="f">สีทีม<input type="color" data-t="'+i+'" data-f="color" value="'+t.color+'"></label></div>'+
+    pblock(0)+(dbl?pblock(1):"");
+}
+function esc(s){return String(s).replace(/&/g,"&amp;").replace(/"/g,"&quot;").replace(/</g,"&lt;");}
+function fillSettings(){
+  $("cShowCourt").checked=S.cfg.showCourt!==false;
+  $("cTitle").value=S.cfg.title;$("cTarget").value=S.cfg.target;$("cSets").value=String(S.cfg.sets);$("cCap").checked=S.cfg.cap;
+  document.querySelectorAll('input[name=mode]').forEach(function(r){r.checked=(r.value===S.cfg.mode);});
+  teamForm(0);teamForm(1);syncManual();renderMedia();
+}
+function shrinkAlpha(file,cb){
+  var r=new FileReader();
+  r.onload=function(){
+    var im=new Image();
+    im.onload=function(){
+      var k=Math.min(1,880/Math.max(im.width,im.height)),c=document.createElement("canvas");
+      c.width=Math.max(1,Math.round(im.width*k));c.height=Math.max(1,Math.round(im.height*k));
+      c.getContext("2d").drawImage(im,0,0,c.width,c.height);
+      var u=c.toDataURL("image/webp",0.88);
+      if(u.indexOf("data:image/webp")!==0)u=c.toDataURL("image/png");
+      cb(u);
+    };
+    im.onerror=function(){say("เปิดไฟล์รูปไม่ได้",3000);};
+    im.src=r.result;
+  };
+  r.readAsDataURL(file);
+}
+function renderMedia(){
+  var m=S.media,l=$("mediaList");l.innerHTML="";
+  m.imgs.forEach(function(u,i){
+    var d=document.createElement("div");d.className="mt"+(i===m.active?" sel":"");
+    var b=document.createElement("button");b.type="button";b.className="pick";b.dataset.mi=i;b.setAttribute("aria-label","เลือกรูป "+(i+1));
+    var im=document.createElement("img");im.alt="";im.src=u;b.appendChild(im);
+    var x=document.createElement("button");x.type="button";x.className="del";x.dataset.md=i;x.textContent="×";x.setAttribute("aria-label","ลบรูป "+(i+1));
+    d.appendChild(b);d.appendChild(x);l.appendChild(d);
+  });
+  $("adScale").value=m.adScale;$("adScaleVal").textContent=m.adScale+"%";
+  $("plScale").value=m.plScale;$("plScaleVal").textContent=m.plScale+"%";
+  $("mediaSecs").value=m.secs;$("mediaSecsVal").textContent=m.secs;
+  syncMediaUi();
+}
+function playerList(){
+  var dbl=S.cfg.mode==="doubles",res=[],i,k;
+  for(i=0;i<2;i++)for(k=0;k<(dbl?2:1);k++)res.push(S.t[i].p[k]);
+  return res;
+}
+function syncMediaUi(){
+  var m=S.media,n=m.imgs.length,pl=playerList(),withPhoto=pl.filter(function(q){return q.photo;}).length;
+  document.querySelectorAll('input[name=mmode]').forEach(function(r){r.checked=(r.value===m.mode);});
+  $("mediaAuto").checked=m.auto!==false;
+  var ai=$("mmAdsInfo"),pi=$("mmPlInfo"),mb=document.querySelectorAll("[data-mm]");
+  ai.textContent=n?(n+" รูป"+(n>1&&m.auto!==false?" • สลับอัตโนมัติ":"")):"ยังไม่มีรูป (เพิ่มในตั้งค่า)";
+  pi.textContent=withPhoto?(withPhoto+"/"+pl.length+" คนมีรูป"):"ยังไม่มีรูปผู้เล่น (เพิ่มในตั้งค่า)";
+  mb.forEach(function(b){
+    var v=b.dataset.mm;
+    b.classList.toggle("on",m.mode===v);
+    b.disabled=(v==="ads"&&!n)||(v==="players"&&!withPhoto);
+  });
+}
+function setBtn(act,label,state,on){
+  document.querySelectorAll('[data-act="'+act+'"]').forEach(function(b){
+    b.textContent="";
+    var s1=document.createElement("span");s1.textContent=label;b.appendChild(s1);
+    if(state){var s2=document.createElement("small");s2.textContent=state;b.appendChild(s2);}
+    b.classList.toggle("on",!!on);
+  });
+}
+function setActDisabled(acts,v){acts.forEach(function(a){document.querySelectorAll('[data-act="'+a+'"]').forEach(function(b){b.disabled=v;});});}
+function syncManual(){$("mA").value=S.g.score[0];$("mB").value=S.g.score[1];$("mSA").value=S.g.setsWon[0];$("mSB").value=S.g.setsWon[1];}
+function num(v,lo,hi,d){v=parseInt(v,10);if(isNaN(v))return d;return Math.max(lo,Math.min(hi,v));}
+
+function ui(){
+  $("lblA").textContent=tname(0);$("lblB").textContent=tname(1);
+  $("btnA").style.background=S.t[0].color;$("btnB").style.background=S.t[1].color;
+  $("nextSet").hidden=!S.g.pending;
+  var os=S.cfg.osize||"M",po=posOf(),courtOn=S.cfg.showCourt!==false,mm=S.media.mode,imgOn=mm!=="off";
+  var recording=!!(rec&&rec.state!=="inactive");
+  document.querySelectorAll("[data-lbl]").forEach(function(el){el.textContent=tname(+el.dataset.lbl);});
+  document.querySelector('[data-act="plusA"]').style.background=S.t[0].color;
+  document.querySelector('[data-act="plusB"]').style.background=S.t[1].color;
+  document.querySelector('[data-act="next"]').hidden=!S.g.pending;
+  setBtn("court","ตำแหน่งผู้เล่น",courtOn?"เปิด":"ปิด",courtOn);
+  setBtn("img","รูปกลางจอ",mm==="ads"?"โฆษณา":(mm==="players"?"ผู้เล่น":"ปิด"),imgOn);
+  setBtn("rec",recording?"■ หยุดบันทึก":"● บันทึก","",recording);
+  document.querySelector('[data-act="rec"]').classList.toggle("rec",recording);
+  $("cShowCourt").checked=courtOn;syncMediaUi();
+  document.querySelectorAll('input[name=opos]').forEach(function(r){r.checked=(r.value===po);});
+  document.querySelectorAll('input[name=osize]').forEach(function(r){r.checked=(r.value===os);});
+  var showSetup=!S.g.started&&!S.g.pending&&S.g.over<0;
+  $("setup").hidden=!showSetup;
+  $("fsA").textContent=tname(0);$("fsB").textContent=tname(1);
+  document.querySelectorAll('input[name=firstServe]').forEach(function(r){r.checked=(+r.value===S.g.server);});
+  $("setupTitle").textContent="ตั้งตำแหน่งก่อนเริ่มเกม • เซต "+S.g.setNo;
+  $("setupHint").textContent=S.cfg.mode==="doubles"
+    ?"แตะผู้เล่นในสนามเพื่อสลับตำแหน่งซ้าย/ขวา จุดเขียวคือผู้เสิร์ฟ (แต้มคู่เสิร์ฟจากขวา แต้มคี่เสิร์ฟจากซ้าย)"
+    :"ประเภทเดี่ยว: ผู้เล่นยืนตามแต้ม (แต้มคู่ = ขวา, แต้มคี่ = ซ้าย) เลือกผู้เสิร์ฟและข้างสนามได้";
+  var locked=S.g.pending||S.g.over>=0||!S.g.started;
+  ["btnA","btnB","minA","minB","endSet","newSet"].forEach(function(id){$(id).disabled=locked;});
+  setActDisabled(["plusA","plusB","minA","minB"],locked);
+  $("undo").disabled=!undoStack.length;setActDisabled(["undo"],!undoStack.length);
+  $("swapServe").disabled=S.g.over>=0;setActDisabled(["swap"],S.g.over>=0);
+  if(!$("settings").hidden)syncManual();
+  fitFs();
+}
+
+/* ---------- events ---------- */
+$("btnA").onclick=function(){point(0,1);};
+$("btnB").onclick=function(){point(1,1);};
+$("minA").onclick=function(){point(0,-1);};
+$("minB").onclick=function(){point(1,-1);};
+$("undo").onclick=undo;
+$("nextSet").onclick=nextSet;
+$("endSet").onclick=endSetManual;
+$("newSet").onclick=newSetOnly;
+$("resetBtn").onclick=resetAll;
+$("swapServe").onclick=swapServe;
+$("camBtn").onclick=function(){if(stream)stopCam();else startCam();};
+$("flipCam").onclick=function(){facing=(facing==="environment")?"user":"environment";if(stream)startCam();};
+$("recBtn").onclick=toggleRec;
+function fitFs(){
+  var a=$("app");
+  if(!a.classList.contains("fs")){a.style.removeProperty("--stageW");return;}
+  var vw=window.innerWidth,vh=window.innerHeight;
+  var bar=document.querySelector(".fsbar"),barH=(bar&&bar.offsetHeight)||52;
+  a.style.setProperty("--barH",barH+"px");
+  if(vh>vw){a.style.removeProperty("--stageW");return;}
+  var availH=vh-barH-6-16,maxW=vw-2*96-12-24;
+  a.style.setProperty("--stageW",Math.floor(Math.max(220,Math.min(availH*16/9,maxW)))+"px");
+}
+function setFs(on){
+  var a=$("app");
+  a.classList.toggle("fs",on);
+  $("imgMenu").hidden=true;
+  if(on){
+    if(a.requestFullscreen){
+      a.requestFullscreen().then(function(){
+        try{screen.orientation.lock("landscape").catch(function(){});}catch(e){}
+      }).catch(function(){});
+    }
+  }else{
+    try{screen.orientation.unlock();}catch(e){}
+    if(document.fullscreenElement){document.exitFullscreen().catch(function(){});}
+  }
+  fitFs();ui();
+}
+document.addEventListener("fullscreenchange",function(){
+  if(!document.fullscreenElement&&$("app").classList.contains("fs")){
+    $("app").classList.remove("fs");
+    try{screen.orientation.unlock();}catch(e){}
+    ui();
+  }else fitFs();
+});
+window.addEventListener("resize",fitFs);
+window.addEventListener("orientationchange",function(){setTimeout(fitFs,200);});
+$("fsBtn").onclick=function(){setFs(true);};
+
+function swapServe(){if(S.g.over>=0)return;pushUndo();S.g.server=1-S.g.server;save();ui();}
+function toggleRec(){if(rec&&rec.state!=="inactive")rec.stop();else startRec();}
+function toggleCourt(){S.cfg.showCourt=!(S.cfg.showCourt!==false);save();ui();}
+function setMediaMode(v){
+  var n=S.media.imgs.length;
+  if(v==="ads"&&!n){say("ยังไม่มีรูปโฆษณา เพิ่มได้ที่ ตั้งค่า > รูปกลางจอ",4500);ui();return;}
+  if(v==="players"&&!playerList().some(function(q){return q.photo;})){say("ยังไม่มีรูปผู้เล่น เพิ่มได้ที่ ตั้งค่า > ข้อมูลทีม/นักกีฬา",4500);ui();return;}
+  S.media.mode=v;save();ui();
+}
+function toggleImgMenu(force){
+  var mnu=$("imgMenu"),open=(force===undefined)?mnu.hidden:force;
+  mnu.hidden=!open;if(open)syncMediaUi();
+}
+function toggleSettings(force){
+  var st=$("settings"),open=(force===undefined)?st.hidden:force;
+  st.hidden=!open;
+  if(open){fillSettings();if(!$("app").classList.contains("fs"))st.scrollIntoView({behavior:"smooth",block:"start"});st.scrollTop=0;}
+}
+document.addEventListener("click",function(e){
+  if(!e.target.closest)return;
+  var mmb=e.target.closest("[data-mm]");
+  if(mmb){if(!mmb.disabled){setMediaMode(mmb.dataset.mm);toggleImgMenu(false);}return;}
+  if(!e.target.closest("#imgMenu")&&!e.target.closest('[data-act="img"]'))$("imgMenu").hidden=true;
+  var b=e.target.closest("[data-act]");
+  if(!b||b.disabled)return;
+  switch(b.dataset.act){
+    case "plusA":point(0,1);break;
+    case "minA":point(0,-1);break;
+    case "plusB":point(1,1);break;
+    case "minB":point(1,-1);break;
+    case "undo":undo();break;
+    case "swap":swapServe();break;
+    case "court":toggleCourt();break;
+    case "img":toggleImgMenu();break;
+    case "rec":toggleRec();break;
+    case "next":nextSet();break;
+    case "settings":toggleSettings();break;
+    case "exit":setFs(false);break;
+  }
+});
+$("closeSettings").onclick=function(){toggleSettings(false);};
+$("settingsBtn").onclick=function(){toggleSettings();};
+document.querySelectorAll('input[name=opos]').forEach(function(r){r.onchange=function(){if(this.checked){S.cfg.pos=this.value;save();ui();}};});
+document.querySelectorAll('input[name=osize]').forEach(function(r){r.onchange=function(){if(this.checked){S.cfg.osize=this.value;save();ui();}};});
+
+$("mediaFile").onchange=function(){
+  var inp=this,files=Array.prototype.slice.call(inp.files||[]),room=MAXADS-S.media.imgs.length;
+  if(room<=0){say("เก็บรูปโฆษณาได้สูงสุด "+MAXADS+" รูป ลบรูปเก่าก่อน",3500);inp.value="";return;}
+  files.slice(0,room).forEach(function(f){
+    shrinkAlpha(f,function(u){if(S.media.imgs.length>=MAXADS)return;S.media.imgs.push(u);S.media.active=S.media.imgs.length-1;saveAds();renderMedia();ui();});
+  });
+  inp.value="";
+};
+$("mediaList").addEventListener("click",function(e){
+  var t=e.target.closest("button");if(!t)return;
+  if(t.dataset.mi!==undefined){S.media.active=+t.dataset.mi;}
+  else if(t.dataset.md!==undefined){
+    S.media.imgs.splice(+t.dataset.md,1);
+    if(S.media.active>=S.media.imgs.length)S.media.active=Math.max(0,S.media.imgs.length-1);
+    if(!S.media.imgs.length&&S.media.mode==="ads")S.media.mode="off";
+  }else return;
+  saveAds();renderMedia();ui();
+});
+$("adScale").oninput=function(){S.media.adScale=num(this.value,30,100,70);$("adScaleVal").textContent=S.media.adScale+"%";save();};
+$("plScale").oninput=function(){S.media.plScale=num(this.value,30,100,70);$("plScaleVal").textContent=S.media.plScale+"%";save();};
+document.querySelectorAll('input[name=mmode]').forEach(function(r){r.onchange=function(){if(this.checked)setMediaMode(this.value);};});
+$("mediaAuto").onchange=function(){S.media.auto=this.checked;save();ui();};
+$("mediaSecs").oninput=function(){S.media.secs=num(this.value,2,20,5);$("mediaSecsVal").textContent=S.media.secs;save();};
+
+$("cTitle").oninput=function(){S.cfg.title=this.value;save();};
+$("cTarget").onchange=function(){S.cfg.target=num(this.value,1,30,21);this.value=S.cfg.target;save();ui();};
+$("cSets").onchange=function(){S.cfg.sets=parseInt(this.value,10);save();ui();};
+$("cCap").onchange=function(){S.cfg.cap=this.checked;save();};
+document.querySelectorAll('input[name=mode]').forEach(function(r){r.onchange=function(){if(this.checked){S.cfg.mode=this.value;save();teamForm(0);teamForm(1);}};});
+
+$("settings").addEventListener("input",function(e){
+  var el=e.target,f=el.dataset&&el.dataset.f;if(!f)return;
+  var i=+el.dataset.t;
+  if(f==="name")S.t[i].name=el.value;
+  else if(f==="color"){S.t[i].color=el.value;}
+  else if(f==="pname")S.t[i].p[+el.dataset.p].name=el.value;
+  else return;
+  save();ui();
+});
+$("settings").addEventListener("change",function(e){
+  var el=e.target;if(!el.dataset||el.dataset.f!=="photo"||!el.files[0])return;
+  var i=+el.dataset.t,k=+el.dataset.p;
+  shrink(el.files[0],function(url){S.t[i].p[k].photo=url;save();teamForm(i);});
+});
+$("settings").addEventListener("click",function(e){
+  var el=e.target;if(!el.dataset||el.dataset.f!=="clear")return;
+  var i=+el.dataset.t,k=+el.dataset.p;S.t[i].p[k].photo="";save();teamForm(i);
+});
+$("applyManual").onclick=function(){
+  pushUndo();
+  var cs=capScore();
+  S.g.score=[num($("mA").value,0,cs,0),num($("mB").value,0,cs,0)];
+  S.g.setsWon=[num($("mSA").value,0,3,0),num($("mSB").value,0,3,0)];
+  S.g.pending=false;S.g.over=-1;
+  if(S.g.score[0]+S.g.score[1]+S.g.setsWon[0]+S.g.setsWon[1]>0)S.g.started=true;
+  save();ui();say("ปรับแต้มแล้ว "+S.g.score[0]+" - "+S.g.score[1],2500);
+};
+document.addEventListener("keydown",function(e){
+  if(/INPUT|SELECT|TEXTAREA/.test((e.target.tagName||"")))return;
+  if(e.key==="1"||e.key==="ArrowLeft")point(0,1);
+  else if(e.key==="2"||e.key==="ArrowRight")point(1,1);
+  else if(e.key==="z"||e.key==="Z")undo();
+});
+
+$("cShowCourt").onchange=function(){S.cfg.showCourt=this.checked;save();ui();};
+$("startGame").onclick=function(){pushUndo();S.g.started=true;say("เริ่มเกม • "+tname(S.g.server)+" เสิร์ฟ",3500);save();ui();};
+$("swapSides").onclick=function(){S.g.flip=!S.g.flip;save();ui();};
+document.querySelectorAll('input[name=firstServe]').forEach(function(r){r.onchange=function(){if(this.checked){S.g.server=+this.value;save();ui();}};});
+scv.addEventListener("click",function(e){
+  if(S.cfg.mode!=="doubles")return;
+  var r=scv.getBoundingClientRect(),px=(e.clientX-r.left)*(scv.width/r.width),py=(e.clientY-r.top)*(scv.height/r.height);
+  for(var i=0;i<setupHits.length;i++){
+    var h=setupHits[i];
+    if(Math.hypot(px-h.cx,py-h.cy)<=h.r+12){S.g.right[h.team]=1-S.g.right[h.team];save();ui();return;}
+  }
+});
+
+/* ---------- start ---------- */
+if(idbOK){
+  idbGet("ads").then(function(arr){
+    if(Array.isArray(arr)&&arr.length){S.media.imgs=arr;}
+    else if(S.media.imgs.length){saveAds();}   /* images saved by an older version live in localStorage: move them */
+    if(S.media.active>=S.media.imgs.length)S.media.active=0;
+    renderMedia();ui();
+  }).catch(function(){idbOK=false;});
+}
+ui();
+if(document.fonts&&document.fonts.load){
+  ["700 26px Kanit","500 20px Kanit","400 18px Sarabun","600 17px Sarabun","700 20px Sarabun"].forEach(function(f){document.fonts.load(f,"ก").catch(function(){});});
+}
+frame();
+})();
+</script>
+</body>
+</html>
